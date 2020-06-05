@@ -1,25 +1,111 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
 
 
 ## Loading and preprocessing the data
+Before loading the file, the provided zip-archive is unzipped and the containing file is stored in the same directory. Then, the file CSV file is loaded.
 
+```{r}
+data <- read.csv("activity.csv", header=T)
+data <- cbind(data, date_correct = as.Date(data$date, format="%Y-%m-%d"))
+data <- subset(data, select=c(steps,date_correct,interval))
+colnames(data) <- c("steps","date","interval")
+```
+
+The date is not recognized as date. Therefore, we convert it to the type date using the mentioned functions.
 
 
 ## What is mean total number of steps taken per day?
+
+We want to calculate the total number of steps per day. The data should be displayed as a histogram. We will use the library ggplot2 to create the relevant plot.
+
+```{r}
+library(ggplot2)
+
+totals <- aggregate (x = data$steps, by=list(data$date), FUN = sum)
+
+ggplot(totals, aes(x=x)) + geom_histogram(binwidth=1000)
+```
+
+In addition, we want to show the mean and the median per day.
+```{r}
+means <- aggregate (x = data$steps, by=list(data$date), FUN = mean)
+medians <- aggregate (x = data$steps, by=list(data$date), FUN = median)
+
+means
+medians
+```
 
 
 
 ## What is the average daily activity pattern?
 
-
+To obtain the average daily activity pattern, we first calculate the menas by interval. As there are a lot of NA values, we remove them in order to get a valid result. Then, we plot the data.
+```{r}
+means_plot <- aggregate(x = data$steps, by=list(data$interval), FUN = mean, na.rm=TRUE, na.action=na.omit)
+p <- ggplot(means_plot, aes(x=Group.1, y = x))+geom_line() + xlab("")
+p
+```
+Next, we determine the interval with the maximum average number of steps.
+```{r}
+max_steps = means_plot[means_plot$x == max(means_plot$x),]
+colnames(max_steps) = c("Interval", "Mean no. of steps")
+max_steps
+```
+The relevant interval is `r max_steps$Interval`.
 
 ## Imputing missing values
 
+First, we get the number of missing values.
+```{r}
+sum(is.na(data$steps))
+```
 
+To make up for the missing values, we pursue the strategy of imputing the mean number of steps per interval. The new data set is denoted as `data_new`.
+```{r}
+require(Hmisc)
+require(plyr)
+data_new <- ddply(data, "interval", mutate, imputed.value=impute(steps, mean))
+data_new$steps <- floor(data_new$imputed.value)
+data_new <- subset(data_new, select=c(steps,date,interval))
+```
+
+Next, we will plot the new data.
+
+```{r}
+
+totals_new <- aggregate (x = data$steps, by=list(data$date), FUN = sum)
+
+ggplot(totals_new, aes(x=x)) + geom_histogram(binwidth=1000)
+```
+
+Lastly, we will calculate the mean and the median.
+
+```{r}
+means <- aggregate (x = data_new$steps, by=list(data_new$date), FUN = mean)
+medians <- aggregate (x = data_new$steps, by=list(data$date), FUN = median)
+
+means
+medians
+```
+
+As we are using the means by group, the means do not change. However, when considering different ways of aggregation, this may change.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+First, we determine the day of the week of the given date. As this R installation is in German, I use the German words for Saturday and Sunday respectively. Then we plot the graph according to the instructions.
+```{r}
+data_new$weekdays <- weekdays(data_new$date, abbreviate=FALSE)
+data_new$weekend_indicator <- ifelse(data_new$weekdays == "Samstag" | data_new$weekdays == "Sonntag", "weekend", "weekday")
+data_new <- subset(data_new, select=c(steps,date,interval,weekend_indicator))
+
+means_plot <- aggregate(x = data_new$steps, by=list(data_new$interval, data_new$weekend_indicator), FUN = mean, na.rm=TRUE, na.action=na.omit)
+ggplot(means_plot, aes(x=Group.1, y = x))+geom_line() + xlab("")+facet_wrap(~Group.2, nrow=2)
+```
+
+There seems to be a difference between weekdays and weekend. For example, weekday activity starts earlier but also ends ealier, while weekend activity keeps on going for later intervals.
